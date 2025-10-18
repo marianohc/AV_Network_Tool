@@ -2,11 +2,12 @@
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
+#include "Helper_ANSI.hpp"
 
 using boost::asio::ip::tcp;
 
 TcpClient::TcpClient()
-    : ioctx_(), socket_(ioctx_), recv_buffer_(1024)
+    : ioctx_(), socket_(ioctx_), recv_buffer_(1024), connected_to_server{false}, last_message_sent{false}
 {
     work_guard_ = std::make_unique<
         boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>(ioctx_.get_executor());
@@ -29,8 +30,10 @@ void TcpClient::connect(const std::string& host, unsigned short port) {
 
 void TcpClient::on_connect(const boost::system::error_code& ec) {
     if (!ec) {
-        std::cout << "Conectado al servidor.\n";
 
+        std::cout << ansi::clear;
+        std::cout << ansi::green << "Conectado al servidor." << ansi::white << std::endl << std::endl;
+        
         // Activar TCP keep-alive
         boost::asio::ip::tcp::socket::keep_alive option(true);
         socket_.set_option(option);
@@ -50,6 +53,9 @@ void TcpClient::on_connect(const boost::system::error_code& ec) {
     } else {
         std::cerr << "[TcpClient] Error al conectar: " << ec.message() << "\n";
     }
+
+    // DEsbloqueo el main thread porque ya esta conectado.
+    connected_to_server = true;
 }
 
 void TcpClient::start() {
@@ -77,9 +83,18 @@ void TcpClient::stop() {
 }
 
 void TcpClient::send(const std::vector<uint8_t>& data) {
+
+    std::cout << "Aca 02" << std::endl;
+    
     if (!running_ || !socket_.is_open()) return;
 
+    for (auto b : data) {
+        std::cout << b << std::endl;
+    }
+
     auto buf = std::make_shared<std::vector<uint8_t>>(data);
+
+    
     boost::asio::post(ioctx_, [this, buf]() {
         boost::asio::async_write(socket_, boost::asio::buffer(*buf),
             [this, buf](const boost::system::error_code& ec, std::size_t bytes_transferred) {
@@ -89,12 +104,11 @@ void TcpClient::send(const std::vector<uint8_t>& data) {
 }
 
 void TcpClient::send(const std::string& data) {
+    std::cout << "Aca 01" << std::endl;
     if (!running_ || !socket_.is_open()) return;
 
     auto buf = std::make_shared<std::string>(data);
 
-    std::cout << "Going to Send: " << data << std::endl;
-    
     boost::asio::post(ioctx_, [this, buf]() {
         boost::asio::async_write(socket_, boost::asio::buffer(*buf),
             [this, buf](const boost::system::error_code& ec, std::size_t bytes_transferred) {
@@ -125,9 +139,7 @@ void TcpClient::handle_read(const boost::system::error_code& ec, std::size_t byt
         if (ec != boost::asio::error::eof) {
             std::cerr << "[TcpClient] read error: " << ec.message() << "\n";
             stop();
-        } else {
-            std::cout << "Siga siga..." << std::endl;            
-        }
+        } 
         return;
     }
 
@@ -148,10 +160,10 @@ void TcpClient::handle_read(const boost::system::error_code& ec, std::size_t byt
 
 void TcpClient::handle_write(const boost::system::error_code& ec, std::size_t /*bytes_transferred*/) {
 
-    std::cout << "Callback write executed" << std::endl;
-
     if (ec) {
         std::cerr << "[TcpClient] write error: " << ec.message() << "\n";
+    } else {
+        last_message_sent = true;
     }
 }
 

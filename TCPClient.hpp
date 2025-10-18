@@ -23,6 +23,10 @@ public:
     void set_receive_callback(ReceiveCallback cb);
     bool is_connected() const;
 
+    bool get_conection_state() { return connected_to_server; }
+    bool get_last_message_state() { return last_message_sent; }
+    void clear_message_sent() { last_message_sent = false; }
+
 private:
     void on_connect(const boost::system::error_code& ec);
     void do_async_read();
@@ -36,6 +40,8 @@ private:
     std::atomic<bool> running_{false};
     std::vector<uint8_t> recv_buffer_;
     ReceiveCallback rx_callback_;
+    bool connected_to_server;
+    bool last_message_sent;
 };
 
 
